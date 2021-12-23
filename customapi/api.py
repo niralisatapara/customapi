@@ -4,7 +4,7 @@ from frappe.utils import escape_html
 from frappe.website.utils import is_signup_disabled
 
 @frappe.whitelist(allow_guest=True)
-def sign_up(email, full_name, password, redirect_to):
+def sign_up(email, full_name, password, redirect_to=None):
 	if is_signup_disabled():
 		frappe.throw(_('Sign Up is disabled'), title='Not Allowed')
 
@@ -31,7 +31,15 @@ def sign_up(email, full_name, password, redirect_to):
 		user.flags.ignore_permissions = True
 		user.flags.ignore_password_policy = True
 		user.insert()
-
+		api_secret = frappe.generate_hash(length=15)
+		# if api key is not set generate api key
+		if not user.api_key:
+			api_key = frappe.generate_hash(length=15)
+			user.api_key = api_key
+		user.api_secret = api_secret
+		user.save()
+		api_token = "token " + user.api_key + ":" + user.get_password('api_secret')
+		api_access_token = {"api_key":user.api_key, "api_secret":user.get_password('api_secret'), "api_token":api_token}
 		# set default signup role as per Portal Settings
 		default_role = frappe.db.get_value("Portal Settings", None, "default_role")
 		if default_role:
@@ -40,7 +48,19 @@ def sign_up(email, full_name, password, redirect_to):
 		if redirect_to:
 			frappe.cache().hset('redirect_after_login', user.name, redirect_to)
 
-		if user.flags.email_sent:
-			return 1, _("Please check your email for verification")
-		else:
-			return 2, _("Please ask your administrator to verify your sign-up")
+		frappe.db.commit()
+		return api_access_token
+
+@frappe.whitelist(allow_guest=True)
+def get_access_api_token(user):
+	try:
+		access_api_token = {}
+		doc = frappe.get_doc("User", user)
+		api_key = doc.api_key
+		api_secret = doc.get_password('api_secret')
+		if api_key and api_secret:
+			api_token = "token " + api_key + ":" + api_secret
+			access_api_token = {"api_key":api_key, "api_secret":api_secret, "api_token":api_token}
+	except Exception as e:
+		return e		
+	return access_api_token 
