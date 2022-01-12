@@ -37,6 +37,10 @@ class BaseController:
 		frappe.db.commit()
 
 		return frappe.local.response
+
+	@frappe.whitelist()
+	def update(self):
+		pass
 		
 	@frappe.whitelist()
 	def delete(self):
